@@ -2,23 +2,24 @@
 from __future__ import annotations
 
 import os
-os.environ.setdefault("KERAS_BACKEND", "torch")  # важливо: Keras 3 працює з backend'ом torch
+os.environ.setdefault("KERAS_BACKEND", "torch")  # Keras 3 працює з backend'ом torch
 
 from typing import List, Dict
 import numpy as np
 from PIL import Image
 
-import keras
 from keras.applications import mobilenet_v2
 from keras.applications.imagenet_utils import decode_predictions
 
-MODEL_NAME = "MobileNetV2 (ImageNet)"
+MODEL_NAME = "MobileNetV2 (ImageNet, Keras Applications)"
 
-# Невеличкий словник “людяних” перекладів частих слів.
-# (Для 1000 класів ImageNet повний переклад не додаємо, але UI українською.)
+# Легкий переклад найчастіших слів (демо-словник).
+# ImageNet має 1000 класів; повний переклад — це окрема велика таблиця.
 _WORDS_UA = {
     "dog": "собака",
     "cat": "кіт",
+    "kitten": "кошеня",
+    "puppy": "цуценя",
     "horse": "кінь",
     "car": "авто",
     "truck": "вантажівка",
@@ -50,23 +51,25 @@ _WORDS_UA = {
     "cup": "чашка",
     "chair": "стілець",
     "table": "стіл",
+    "pizza": "піца",
+    "burger": "бургер",
+    "sandwich": "сендвіч",
 }
 
 def _ensure_rgb(img: Image.Image) -> Image.Image:
     return img.convert("RGB") if img.mode != "RGB" else img
 
 def _to_ua_label(label_en: str) -> str:
-    # ImageNet labels зазвичай виглядають як "golden_retriever" або "sports_car"
+    # ImageNet labels зазвичай: "golden_retriever", "sports_car"
     nice = label_en.replace("_", " ")
     words = nice.split()
-    ua_words = [ _WORDS_UA.get(w.lower(), w) for w in words ]
-    # якщо хоч трохи переклалося — покажемо як українську версію, інакше залишимо англійську “читабельну”
+    ua_words = [_WORDS_UA.get(w.lower(), w) for w in words]
     if ua_words != words:
         return " ".join(ua_words)
     return nice
 
 def get_model():
-    # Ваги будуть автоматично завантажені Keras (під час першого запуску)
+    # Ваги будуть автоматично завантажені Keras при першому запуску
     return mobilenet_v2.MobileNetV2(weights="imagenet")
 
 def preprocess(img: Image.Image) -> np.ndarray:
@@ -74,18 +77,20 @@ def preprocess(img: Image.Image) -> np.ndarray:
     img = img.resize((224, 224))
     arr = np.array(img, dtype=np.float32)
     arr = np.expand_dims(arr, axis=0)
-    arr = mobilenet_v2.preprocess_input(arr)  # нормалізація як у MobileNetV2
+    arr = mobilenet_v2.preprocess_input(arr)
     return arr
 
 def predict_topk(image: Image.Image, model, top_k: int = 5) -> List[Dict]:
     x = preprocess(image)
     preds = model.predict(x, verbose=0)
-    decoded = decode_predictions(preds, top=top_k)[0]  # список (class_id, label, score)
-    out = []
+    decoded = decode_predictions(preds, top=top_k)[0]  # (class_id, label, score)
+    out: List[Dict] = []
     for _, label, score in decoded:
-        out.append({
-            "label_en": label,
-            "label_ua": _to_ua_label(label),
-            "score": float(score),
-        })
+        out.append(
+            {
+                "label_en": label,
+                "label_ua": _to_ua_label(label),
+                "score": float(score),
+            }
+        )
     return out
